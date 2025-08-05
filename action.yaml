@@ -1,0 +1,61 @@
+name: 'get commit status target url'
+author: 'sozialhelden'
+description: "GitHub action to wait for a commit status and get it's target URL."
+
+inputs:
+  github-token:
+    description: 'GitHub token to access the repository.'
+    required: true
+  commit-status-name:
+    description: 'The commit status name to wait for, e.g. "argo / deployment".'
+    default: 'argo / deployment'
+    required: false
+
+outputs:
+  target-url:
+    description: 'The target URL of the commit status.'
+    value: ${{ steps.get-commit-status-target-url.outputs.target-url }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: get-commit-status-target-url
+      name: Get commit status target URL
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        COMMIT_STATUS_NAME: ${{ inputs.commit-status-name }}
+        COMMIT_SHA: ${{ github.event.after }}
+      run: |
+        COUNTER=0
+        SUCCESSFUL=false
+        STATUS="unknown"
+
+        while [ "$SUCCESSFUL" = "false" ]; do
+          sleep 20
+          ((COUNTER=COUNTER+1))
+
+          DEPLOYMENT=$(\
+            curl -L -s \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$COMMIT_SHA/status \
+            | jq ".statuses[] | select(.context == \"$COMMIT_STATUS_NAME\") | ." \
+          )
+          STATUS=$(echo "$DEPLOYMENT" | jq -r '.state')
+          TARGET_URL=$(echo "$DEPLOYMENT" | jq -r '.target_url')
+
+          if [ "$STATUS" = "success" ]; then
+            echo "Commit status is "success" -> Grabbing target url: $TARGET_URL"
+            echo "target-url=$TARGET_URL" >> $GITHUB_OUTPUT
+            SUCCESSFUL=true
+          else
+            echo "Commit status is: "$STATUS" -> checking again in 20 seconds..."
+          fi
+
+          if [ $COUNTER -gt 30 ]; then
+            echo "ERROR: Commit status not successful after 10 minutes, exiting..."
+            exit 1
+          fi
+        done
