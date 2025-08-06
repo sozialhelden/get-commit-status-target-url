@@ -27,6 +27,22 @@ runs:
         COMMIT_STATUS_NAME: ${{ inputs.commit-status-name }}
         COMMIT_SHA: ${{ github.event.after }}
       run: |
+        if ! command -v curl &> /dev/null; then
+          echo "curl not found, installing..."
+          apt-get update -qq
+          apt-get install -y curl
+        else
+          echo "curl is already installed"
+        fi
+        
+        if ! command -v jq &> /dev/null; then
+          echo "jq not found, installing..."
+          apt-get update -qq
+          apt-get install -y jq
+        else
+          echo "jq is already installed"
+        fi
+        
         COUNTER=0
         SUCCESSFUL=false
         STATUS="unknown"
